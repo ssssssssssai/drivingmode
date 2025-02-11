@@ -1,0 +1,114 @@
+package com.example.drivingmode
+
+import android.Manifest
+import android.app.*
+import android.content.*
+import android.content.pm.PackageManager
+import android.os.*
+import android.telephony.*
+import android.widget.*
+import androidx.appcompat.app.AppCompatActivity
+import androidx.core.app.ActivityCompat
+import androidx.core.app.NotificationCompat
+import android.speech.tts.TextToSpeech
+import java.util.*
+
+class MainActivity : AppCompatActivity() {
+
+    private lateinit var toggleButton: ToggleButton
+    private var isDrivingModeOn = false
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        toggleButton = ToggleButton(this).apply {
+            textOn = "Driving Mode ON"
+            textOff = "Driving Mode OFF"
+            setOnCheckedChangeListener { _, isChecked ->
+                isDrivingModeOn = isChecked
+                val serviceIntent = Intent(this@MainActivity, DrivingModeService::class.java)
+                if (isChecked) startService(serviceIntent) else stopService(serviceIntent)
+            }
+        }
+        setContentView(toggleButton)
+    }
+}
+
+class DrivingModeService : Service(), TextToSpeech.OnInitListener {
+
+    private lateinit var telephonyManager: TelephonyManager
+    private lateinit var textToSpeech: TextToSpeech
+    private var isSpeaking = false
+    private var dtmfGenerator: DtmfToneGenerator? = null
+
+    override fun onCreate() {
+        super.onCreate()
+        textToSpeech = TextToSpeech(this, this)
+        telephonyManager = getSystemService(Context.TELEPHONY_SERVICE) as TelephonyManager
+        dtmfGenerator = DtmfToneGenerator()
+        
+        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.READ_PHONE_STATE) != PackageManager.PERMISSION_GRANTED) {
+            stopSelf()
+            return
+        }
+        
+        telephonyManager.listen(phoneStateListener, PhoneStateListener.LISTEN_CALL_STATE)
+        startForegroundService()
+    }
+
+    private val phoneStateListener = object : PhoneStateListener() {
+        override fun onCallStateChanged(state: Int, phoneNumber: String?) {
+            when (state) {
+                TelephonyManager.CALL_STATE_RINGING -> {
+                    if (!isSpeaking) {
+                        speakAnnouncement()
+                    }
+                }
+            }
+        }
+    }
+
+    private fun speakAnnouncement() {
+        val message = "The person you are calling is driving. If urgent, press 1 to connect."
+        textToSpeech.speak(message, TextToSpeech.QUEUE_FLUSH, null, null)
+        isSpeaking = true
+    }
+
+    private fun detectDtmfTone(digit: Char) {
+        if (digit == '1') {
+            Toast.makeText(this, "Urgent call detected. Letting it ring.", Toast.LENGTH_SHORT).show()
+            // Logic to allow the call to go through
+        }
+    }
+
+    private fun startForegroundService() {
+        val channelId = "DrivingModeServiceChannel"
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = NotificationChannel(channelId, "Driving Mode Service", NotificationManager.IMPORTANCE_LOW)
+            val manager = getSystemService(NotificationManager::class.java)
+            manager.createNotificationChannel(channel)
+        }
+        val notification: Notification = NotificationCompat.Builder(this, channelId)
+            .setContentTitle("Driving Mode Enabled")
+            .setContentText("Incoming calls will be notified that you are driving.")
+            .setSmallIcon(android.R.drawable.ic_dialog_info)
+            .addAction(0, "Toggle Mode", PendingIntent.getService(this, 0, Intent(this, DrivingModeService::class.java).apply { action = "TOGGLE_MODE" }, PendingIntent.FLAG_UPDATE_CURRENT))
+            .build()
+        startForeground(1, notification)
+    }
+
+    override fun onInit(status: Int) {
+        if (status == TextToSpeech.SUCCESS) {
+            textToSpeech.language = Locale.US
+        }
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        textToSpeech.stop()
+        textToSpeech.shutdown()
+    }
+
+    override fun onBind(intent: Intent?): IBinder? {
+        return null
+    }
+}

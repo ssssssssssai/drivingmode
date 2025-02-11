@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Driving Mode</string>
+    <string name="driving_mode_on">Driving Mode ON</string>
+    <string name="driving_mode_off">Driving Mode OFF</string>
+</resources>
