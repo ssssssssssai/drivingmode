@@ -1,0 +1,14 @@
+image:
+  file: .gitpod.Dockerfile
+
+tasks:
+  - init: ./gradlew clean
+    command: ./gradlew build
+
+ports:
+  - port: 8080
+    onOpen: open-preview
+
+vscode:
+  extensions:
+    - kotlin.kotlin
